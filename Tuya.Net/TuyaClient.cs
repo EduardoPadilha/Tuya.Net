@@ -64,6 +64,8 @@ namespace Tuya.Net
         /// </summary>
         private readonly int maxAuthRetryCount;
 
+
+        private bool reloadCredentials = false;
         /// <summary>
         /// Get the Tuya client builder.
         /// </summary>
@@ -83,8 +85,22 @@ namespace Tuya.Net
                 logger?.LogInformation("Access token is missing. Obtaining access token for ");
                 tuyaAccessToken = await GetAccessTokenInfoAsync(ct: cancellationToken);
             }
-
-            return await LowLevel.SendRequestAsync<T>(httpMethod, path, tuyaAccessToken, payload, cancellationToken);
+            try
+            {
+                var resultado = await LowLevel.SendRequestAsync<T>(httpMethod, path, tuyaAccessToken, payload, cancellationToken);
+                reloadCredentials = false;
+                return resultado;
+            }
+            catch (TuyaResponseException ex) when (ex.Code == "1010" || ex.Message.Contains("token invalid"))
+            {
+                if (!reloadCredentials)
+                {
+                    reloadCredentials = true;
+                    tuyaAccessToken = await GetAccessTokenInfoAsync(ct: cancellationToken);
+                    return await RequestAsync<T>(httpMethod, path, payload, cancellationToken);
+                }
+                else throw;
+            }
         }
 
         /// <summary>
